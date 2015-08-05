@@ -1,0 +1,19 @@
+/*
+  Copyright 2015 Tim Nanos, timnanos.com
+  Licensed under the Apache License, Version 2.0
+*/
+
+
+CREATE TABLE T_HCC_ORDERBY_ADVISOR_LOG
+(
+  TABLE_NAME    VARCHAR2(30),
+  OWNER         VARCHAR2(30),
+  ORDER_BY_COLS VARCHAR2(4000),
+  BYTES         NUMBER,
+  COLS_USED     NUMBER,
+  DATE_ANALYSED TIMESTAMP
+)
+NOLOGGING
+PARALLEL
+COMPRESS FOR QUERY LOW;
+/
