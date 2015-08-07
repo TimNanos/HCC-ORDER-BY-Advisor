@@ -279,9 +279,19 @@ CREATE OR REPLACE PACKAGE BODY PKG_HCC_ORDERBY_ADVISOR AS
       RETURN;
     END IF;
 
-    -- Generate a table with a 1000000 rows sample of data. This is a number recommended by Oracle White papers
-    EXECUTE IMMEDIATE pkg_hcc_orderby_advisor.getDDLStatement(pkg_hcc_orderby_advisor.gv_tempTableName1, pkg_hcc_orderby_advisor.analyseTable.ownerName,
-      pkg_hcc_orderby_advisor.analyseTable.tableName, 'DBMS_RANDOM.VALUE', 1000000);
+    BEGIN
+      -- Generate a table with a 1000000 rows sample of data. This is a number recommended by Oracle White papers
+      EXECUTE IMMEDIATE pkg_hcc_orderby_advisor.getDDLStatement(pkg_hcc_orderby_advisor.gv_tempTableName1, pkg_hcc_orderby_advisor.analyseTable.ownerName,
+        pkg_hcc_orderby_advisor.analyseTable.tableName, 'DBMS_RANDOM.VALUE', 1000000);
+    EXCEPTION
+      WHEN OTHERS THEN
+        -- ORA-01031: insufficient privileges
+        IF (SQLCODE = -1031) THEN
+          RAISE_APPLICATION_ERROR(-20001, 'Error. ORA-01031: insufficient privileges. Please run the following command: GRANT CREATE TABLE TO ' || USER);
+        ELSE
+          RAISE;
+        END IF;
+    END;
 
     -- Do the tests
     pkg_hcc_orderby_advisor.smartOrderingsProcessing(pkg_hcc_orderby_advisor.analyseTable.ownerName,
