@@ -81,7 +81,7 @@ CREATE OR REPLACE PACKAGE BODY PKG_HCC_ORDERBY_ADVISOR AS
     DBMS_OUTPUT.PUT_LINE(RPAD('ORDER BY', ln_outputLength) || ' Table size, bytes');
 
     FOR curs IN (
-      SELECT t.TABLE_NAME,
+      SELECT /*+ NOPARALLEL */ t.TABLE_NAME,
              t.ORDER_BY_COLS,
              t.BYTES
         FROM T_HCC_ORDERBY_ADVISOR_LOG t
@@ -199,7 +199,7 @@ CREATE OR REPLACE PACKAGE BODY PKG_HCC_ORDERBY_ADVISOR AS
         pkg_hcc_orderby_advisor.smartOrderingsProcessing.tableName, i);
 
       FOR curs IN (
-        SELECT t.TABLE_NAME,
+        SELECT /*+ NOPARALLEL */ t.TABLE_NAME,
                t.OWNER,
                t.ORDER_BY_COLS
           FROM T_HCC_ORDERBY_ADVISOR_LOG t
@@ -311,7 +311,7 @@ CREATE OR REPLACE PACKAGE BODY PKG_HCC_ORDERBY_ADVISOR AS
   BEGIN
 
     FOR curs IN (
-      SELECT t.TABLE_NAME
+      SELECT /*+ NOPARALLEL */ t.TABLE_NAME
         FROM ALL_TABLES t
        WHERE t.OWNER = pkg_hcc_orderby_advisor.analyseAllTables.ownerName
        ORDER BY t.TABLE_NAME
