@@ -7,7 +7,7 @@
 CREATE OR REPLACE PACKAGE BODY PKG_HCC_ORDERBY_ADVISOR AS
 
   FUNCTION getDDLStatement(newTableName IN T_HCC_ORDERBY_ADVISOR_LOG.TABLE_NAME%TYPE, ownerName IN T_HCC_ORDERBY_ADVISOR_LOG.OWNER%TYPE,
-    tableName IN T_HCC_ORDERBY_ADVISOR_LOG.TABLE_NAME%TYPE, orderByCols IN T_HCC_ORDERBY_ADVISOR_LOG.ORDER_BY_COLS%TYPE, limitRows IN NUMBER := 0)
+    tableName IN T_HCC_ORDERBY_ADVISOR_LOG.TABLE_NAME%TYPE, orderByCols IN T_HCC_ORDERBY_ADVISOR_LOG.ORDER_BY_COLS%TYPE, limitRows IN PLS_INTEGER := 0)
   RETURN CLOB
   AS
     ll_DDLStatement CLOB;
@@ -31,10 +31,9 @@ CREATE OR REPLACE PACKAGE BODY PKG_HCC_ORDERBY_ADVISOR AS
 
   PROCEDURE printReport(tableName IN VARCHAR2, ownerName IN VARCHAR2)
   AS
-    ln_bytesCurrent NUMBER;
-    ln_bytesMin     NUMBER;
-    ln_ordersCount  NUMBER;
-    ln_outputLength NUMBER;
+    ln_bytesMin     T_HCC_ORDERBY_ADVISOR_LOG.BYTES%TYPE;
+    ln_ordersCount  PLS_INTEGER;
+    ln_outputLength PLS_INTEGER;
     lt_dateAnalysed T_HCC_ORDERBY_ADVISOR_LOG.DATE_ANALYSED%TYPE;
   BEGIN
 
@@ -131,7 +130,7 @@ CREATE OR REPLACE PACKAGE BODY PKG_HCC_ORDERBY_ADVISOR AS
 
 
   PROCEDURE generatePossibleOrderings(ownerName IN T_HCC_ORDERBY_ADVISOR_LOG.OWNER%TYPE,
-    tableName IN T_HCC_ORDERBY_ADVISOR_LOG.TABLE_NAME%TYPE, columnsCount IN NUMBER)
+    tableName IN T_HCC_ORDERBY_ADVISOR_LOG.TABLE_NAME%TYPE, columnsCount IN PLS_INTEGER)
   AS
   BEGIN
     IF pkg_hcc_orderby_advisor.generatePossibleOrderings.columnsCount = 0 THEN
@@ -189,7 +188,7 @@ CREATE OR REPLACE PACKAGE BODY PKG_HCC_ORDERBY_ADVISOR AS
 
   -- Process not all the possible ORDER BY options, but only the most optimal ones
   PROCEDURE smartOrderingsProcessing(ownerName IN T_HCC_ORDERBY_ADVISOR_LOG.OWNER%TYPE,
-    tableName IN T_HCC_ORDERBY_ADVISOR_LOG.TABLE_NAME%TYPE, columnsCountTotal IN NUMBER)
+    tableName IN T_HCC_ORDERBY_ADVISOR_LOG.TABLE_NAME%TYPE, columnsCountTotal IN PLS_INTEGER)
   AS
   BEGIN
 
@@ -220,13 +219,9 @@ CREATE OR REPLACE PACKAGE BODY PKG_HCC_ORDERBY_ADVISOR AS
 
   PROCEDURE analyseTable(tableName IN VARCHAR2, ownerName IN VARCHAR2)
   AS
-    TYPE lt_CursorColumns IS REF CURSOR;
-    TYPE lt_ListColumns   IS TABLE OF T_HCC_ORDERBY_ADVISOR_LOG.ORDER_BY_COLS%TYPE;
-    lc_CursorColumns      lt_CursorColumns;
-    ll_ListColumns        lt_ListColumns;
-    ln_columnsCountTotal  NUMBER;
-    ln_tableCount         NUMBER;
-    ln_tempTableExists    NUMBER;
+    ln_columnsCountTotal  PLS_INTEGER;
+    ln_tableCount         PLS_INTEGER;
+    ln_tempTableExists    PLS_INTEGER;
   BEGIN
 
     -- Check if the name for the temporary table was chosen properly (if it already exists, raise an error)
@@ -280,9 +275,9 @@ CREATE OR REPLACE PACKAGE BODY PKG_HCC_ORDERBY_ADVISOR AS
     END IF;
 
     BEGIN
-      -- Generate a table with a 1000000 rows sample of data. This is a number recommended by Oracle White papers
+      -- Generate a sample table
       EXECUTE IMMEDIATE pkg_hcc_orderby_advisor.getDDLStatement(pkg_hcc_orderby_advisor.gv_tempTableName1, pkg_hcc_orderby_advisor.analyseTable.ownerName,
-        pkg_hcc_orderby_advisor.analyseTable.tableName, 'DBMS_RANDOM.VALUE', 1000000);
+        pkg_hcc_orderby_advisor.analyseTable.tableName, 'DBMS_RANDOM.VALUE', pkg_hcc_orderby_advisor.gn_sampleTableRows);
     EXCEPTION
       WHEN OTHERS THEN
         -- ORA-01031: insufficient privileges
