@@ -133,54 +133,87 @@ CREATE OR REPLACE PACKAGE BODY PKG_HCC_ORDERBY_ADVISOR AS
     tableName IN T_HCC_ORDERBY_ADVISOR_LOG.TABLE_NAME%TYPE, columnsCount IN PLS_INTEGER)
   AS
   BEGIN
-    IF pkg_hcc_orderby_advisor.generatePossibleOrderings.columnsCount = 0 THEN
+    IF generatePossibleOrderings.columnsCount = 0 THEN
       -- Set no ordering
       INSERT INTO T_HCC_ORDERBY_ADVISOR_LOG(TABLE_NAME, OWNER, ORDER_BY_COLS, COLS_USED)
-      VALUES (pkg_hcc_orderby_advisor.generatePossibleOrderings.tableName, pkg_hcc_orderby_advisor.generatePossibleOrderings.ownerName,
-          NULL, pkg_hcc_orderby_advisor.generatePossibleOrderings.columnsCount);
-
-    ELSIF pkg_hcc_orderby_advisor.generatePossibleOrderings.columnsCount = 1 THEN
+      SELECT t.TABLE_NAME,
+             t.OWNER,
+             t.ORDER_BY_COLS,
+             t.COLS_USED
+        FROM (SELECT generatePossibleOrderings.tableName AS TABLE_NAME,
+                     generatePossibleOrderings.ownerName AS OWNER,
+                     NULL AS ORDER_BY_COLS,
+                     generatePossibleOrderings.columnsCount AS COLS_USED
+                FROM DUAL
+             )t
+       WHERE NOT EXISTS (SELECT NULL
+                           FROM T_HCC_ORDERBY_ADVISOR_LOG tlog
+                          WHERE tlog.TABLE_NAME = t.TABLE_NAME
+                            AND tlog.OWNER = t.OWNER
+                            AND (tlog.ORDER_BY_COLS IS NULL AND t.ORDER_BY_COLS IS NULL)
+                            AND tlog.COLS_USED = t.COLS_USED);
+    ELSIF generatePossibleOrderings.columnsCount = 1 THEN
       -- Order by every single column
       INSERT INTO T_HCC_ORDERBY_ADVISOR_LOG(TABLE_NAME, OWNER, ORDER_BY_COLS, COLS_USED)
       SELECT t.TABLE_NAME,
              t.OWNER,
-             '"' || COLUMN_NAME || '"' AS ORDER_BY_COLS,
-             pkg_hcc_orderby_advisor.generatePossibleOrderings.columnsCount AS COLS_USED
-        FROM ALL_TAB_COLUMNS t
-       WHERE t.TABLE_NAME = pkg_hcc_orderby_advisor.generatePossibleOrderings.tableName
-         AND t.OWNER = pkg_hcc_orderby_advisor.generatePossibleOrderings.ownerName;
-
+             t.ORDER_BY_COLS,
+             t.COLS_USED
+        FROM (SELECT t.TABLE_NAME,
+                     t.OWNER,
+                     '"' || t.COLUMN_NAME || '"' AS ORDER_BY_COLS,
+                     generatePossibleOrderings.columnsCount AS COLS_USED
+                FROM ALL_TAB_COLUMNS t
+               WHERE t.TABLE_NAME = generatePossibleOrderings.tableName
+                 AND t.OWNER = generatePossibleOrderings.ownerName
+             )t
+       WHERE NOT EXISTS (SELECT NULL
+                           FROM T_HCC_ORDERBY_ADVISOR_LOG tlog
+                          WHERE tlog.TABLE_NAME = t.TABLE_NAME
+                            AND tlog.OWNER = t.OWNER
+                            AND tlog.ORDER_BY_COLS = t.ORDER_BY_COLS
+                            AND tlog.COLS_USED = t.COLS_USED);
     ELSE
       -- Choose the options that seem perspective
       INSERT INTO T_HCC_ORDERBY_ADVISOR_LOG (TABLE_NAME, OWNER, ORDER_BY_COLS, COLS_USED)
-      SELECT tlog.TABLE_NAME,
-             tlog.OWNER,
-             tlog.ORDER_BY_COLS || ', ' || tcols.COLUMN_NAME AS ORDER_BY_COLS,
-             pkg_hcc_orderby_advisor.generatePossibleOrderings.columnsCount AS COLS_USED
-        FROM (SELECT t.TABLE_NAME,
-                     t.OWNER,
-                     t.ORDER_BY_COLS
-                FROM T_HCC_ORDERBY_ADVISOR_LOG t
-               WHERE t.TABLE_NAME = pkg_hcc_orderby_advisor.generatePossibleOrderings.tableName
-                 AND t.OWNER = pkg_hcc_orderby_advisor.generatePossibleOrderings.ownerName
-                 AND t.COLS_USED = pkg_hcc_orderby_advisor.generatePossibleOrderings.columnsCount - 1
-                 AND EXISTS (SELECT NULL
-                                    FROM T_HCC_ORDERBY_ADVISOR_LOG t2
-                                   WHERE t2.TABLE_NAME = t.TABLE_NAME
-                                     AND t2.OWNER = t.OWNER
-                                     AND t2.COLS_USED = t.COLS_USED - 1
-                                     AND t.ORDER_BY_COLS LIKE t2.ORDER_BY_COLS || '%'
-                                     AND t2.BYTES IS NOT NULL
-                                     AND t2.BYTES > t.BYTES)
-             )tlog
-       CROSS JOIN
-             (SELECT '"' || t.COLUMN_NAME || '"' AS COLUMN_NAME
-                FROM ALL_TAB_COLUMNS t
-               WHERE t.TABLE_NAME = pkg_hcc_orderby_advisor.generatePossibleOrderings.tableName
-                 AND t.OWNER = pkg_hcc_orderby_advisor.generatePossibleOrderings.ownerName
-             ) tcols
-       WHERE INSTR(tlog.ORDER_BY_COLS, tcols.COLUMN_NAME) = 0;
-
+      SELECT t.TABLE_NAME,
+             t.OWNER,
+             t.ORDER_BY_COLS,
+             t.COLS_USED
+        FROM (SELECT tlog.TABLE_NAME,
+                     tlog.OWNER,
+                     tlog.ORDER_BY_COLS || ', ' || tcols.COLUMN_NAME AS ORDER_BY_COLS,
+                     generatePossibleOrderings.columnsCount AS COLS_USED
+                FROM (SELECT t.TABLE_NAME,
+                             t.OWNER,
+                             t.ORDER_BY_COLS
+                        FROM T_HCC_ORDERBY_ADVISOR_LOG t
+                       WHERE t.TABLE_NAME = generatePossibleOrderings.tableName
+                         AND t.OWNER = generatePossibleOrderings.ownerName
+                         AND t.COLS_USED = generatePossibleOrderings.columnsCount - 1
+                         AND EXISTS (SELECT NULL
+                                            FROM T_HCC_ORDERBY_ADVISOR_LOG t2
+                                           WHERE t2.TABLE_NAME = t.TABLE_NAME
+                                             AND t2.OWNER = t.OWNER
+                                             AND t2.COLS_USED = t.COLS_USED - 1
+                                             AND t.ORDER_BY_COLS LIKE t2.ORDER_BY_COLS || '%'
+                                             AND t2.BYTES IS NOT NULL
+                                             AND t2.BYTES > t.BYTES)
+                     )tlog
+               CROSS JOIN
+                     (SELECT '"' || t.COLUMN_NAME || '"' AS COLUMN_NAME
+                        FROM ALL_TAB_COLUMNS t
+                       WHERE t.TABLE_NAME = generatePossibleOrderings.tableName
+                         AND t.OWNER = generatePossibleOrderings.ownerName
+                     ) tcols
+               WHERE INSTR(tlog.ORDER_BY_COLS, tcols.COLUMN_NAME) = 0
+             ) t
+       WHERE NOT EXISTS (SELECT NULL
+                           FROM T_HCC_ORDERBY_ADVISOR_LOG tlog
+                          WHERE tlog.TABLE_NAME = t.TABLE_NAME
+                            AND tlog.OWNER = t.OWNER
+                            AND tlog.ORDER_BY_COLS = t.ORDER_BY_COLS
+                            AND tlog.COLS_USED = t.COLS_USED);
     END IF;
 
   END generatePossibleOrderings;
@@ -217,86 +250,112 @@ CREATE OR REPLACE PACKAGE BODY PKG_HCC_ORDERBY_ADVISOR AS
   END smartOrderingsProcessing;
 
 
-  PROCEDURE analyseTable(tableName IN VARCHAR2, ownerName IN VARCHAR2)
+  PROCEDURE analyseTable(tableName IN VARCHAR2, ownerName IN VARCHAR2, continuePrevious IN BOOLEAN := TRUE)
   AS
     ln_columnsCountTotal  PLS_INTEGER;
     ln_tableCount         PLS_INTEGER;
     ln_tempTableExists    PLS_INTEGER;
+    lb_continuable        BOOLEAN := FALSE;
+    ln_rowsCompared       PLS_INTEGER;
   BEGIN
 
     -- Check if the name for the temporary table was chosen properly (if it already exists, raise an error)
     SELECT COUNT(*)
       INTO ln_tempTableExists
       FROM USER_TABLES t
-     WHERE t.TABLE_NAME = pkg_hcc_orderby_advisor.gv_tempTableName2;
+     WHERE t.TABLE_NAME IN (gv_tempTableName1, gv_tempTableName2);
 
+    -- If the temporary table already exists ...
     IF ln_tempTableExists <> 0 THEN
-      /*
-        In case you're reading this text, it means that something went wrong.
-        I chose a name for a table that would be created and dropped multiple times for size comparison purposes only.
-        The name is declared in the variable gv_tempTableName2 above.
-        If you already have an object with the same name, it may be because of two reasons:
-          1. It's an object you use in your database and you need it. In that case, please change gv_tempTableName2 value.
-          2. It is left from a malfunctioned test run. In that case, please drop the table.
-      */
-      RAISE_APPLICATION_ERROR(-20001, 'Error. Table ' || pkg_hcc_orderby_advisor.gv_tempTableName2 || ' already exists. Please review the PKG_HCC_ORDERBY_ADVISOR code or drop the table.');
+      -- ... and the previous analysis should be continued
+      IF continuePrevious THEN
+        BEGIN
+          -- Check if the tables are consistent
+          EXECUTE IMMEDIATE 'SELECT COUNT(*) FROM (SELECT * FROM ' || gv_tempTableName1 || ' MINUS '
+            || 'SELECT * FROM ' || analyseTable.ownerName || '.' || analyseTable.tableName || ')'
+            INTO ln_rowsCompared;
+        EXCEPTION
+          WHEN OTHERS THEN
+            RAISE_APPLICATION_ERROR(-20001, 'Error. Table ' || gv_tempTableName1 || ' is not consistent with ' || analyseTable.ownerName || '.' || analyseTable.tableName || '. Please review the PKG_HCC_ORDERBY_ADVISOR code or drop the ' || gv_tempTableName1 || ' table.');
+        END;
+        -- Check if the data is now different
+        IF ln_rowsCompared > 0 THEN
+          RAISE_APPLICATION_ERROR(-20001, 'Error. Table ' || gv_tempTableName1 || ' is not consistent with ' || analyseTable.ownerName || '.' || analyseTable.tableName || '. Please review the PKG_HCC_ORDERBY_ADVISOR code or drop the ' || gv_tempTableName1 || ' table.');
+        ELSE
+          -- If there was no failure, the previous analysis can be completed
+          lb_continuable := TRUE;
+        END IF;
+      -- ... and the previous analysis should not be continued
+      ELSE
+        /*
+          In case you're reading this text, it means that something went wrong.
+          I chose a name for a table that would be created and dropped multiple times for size comparison purposes only.
+          The name is declared in the variables gv_tempTableName1 and gv_tempTableName2 above.
+          If you already have an object with the same name, it may be because of two reasons:
+            1. It's an object you use in your database and you need it. In that case, please change gv_tempTableName1 and gv_tempTableName2 value.
+            2. It is left from a malfunctioned test run. In that case, please drop the table.
+        */
+        RAISE_APPLICATION_ERROR(-20001, 'Error. Table ' || gv_tempTableName1 || ' or ' || gv_tempTableName2 || ' already exists. Please review the PKG_HCC_ORDERBY_ADVISOR code or drop the ' || gv_tempTableName1 || ' table.');
+      END IF;
     END IF;
-
-    -- Clear previous tests results
-    DELETE FROM T_HCC_ORDERBY_ADVISOR_LOG t
-     WHERE t.TABLE_NAME = pkg_hcc_orderby_advisor.analyseTable.tableName
-       AND t.OWNER = pkg_hcc_orderby_advisor.analyseTable.ownerName;
 
     -- Get the number of columns in the table
     SELECT COUNT(*)
       INTO ln_columnsCountTotal
       FROM ALL_TAB_COLS t
-     WHERE t.TABLE_NAME = pkg_hcc_orderby_advisor.analyseTable.tableName
-       AND t.OWNER = pkg_hcc_orderby_advisor.analyseTable.ownerName;
+     WHERE t.TABLE_NAME = analyseTable.tableName
+       AND t.OWNER = analyseTable.ownerName;
 
-    -- If no columns were found, raise an error
-    IF (ln_columnsCountTotal = 0) THEN
-      RAISE_APPLICATION_ERROR(-20001, 'Error. Table ' || pkg_hcc_orderby_advisor.analyseTable.ownerName ||
-        '.' || pkg_hcc_orderby_advisor.analyseTable.tableName || ' was not found.');
+    IF NOT continuePrevious OR NOT lb_continuable THEN
+      -- If no columns were found, raise an error
+      IF (ln_columnsCountTotal = 0) THEN
+        RAISE_APPLICATION_ERROR(-20001, 'Error. Table ' || analyseTable.ownerName ||
+          '.' || analyseTable.tableName || ' was not found.');
+      END IF;
+
+      -- Clear previous tests results
+      DELETE FROM T_HCC_ORDERBY_ADVISOR_LOG t
+       WHERE t.TABLE_NAME = analyseTable.tableName
+         AND t.OWNER = analyseTable.ownerName;
+
+      -- Check if table has any data
+      EXECUTE IMMEDIATE 'SELECT COUNT(*) FROM ' || analyseTable.ownerName || '.' || analyseTable.tableName
+        INTO ln_tableCount;
+
+      -- If not, any ordering makes no sense, skip it
+      IF ln_tableCount = 0 THEN
+        INSERT INTO T_HCC_ORDERBY_ADVISOR_LOG (TABLE_NAME, OWNER, BYTES)
+        VALUES (analyseTable.tableName, analyseTable.ownerName, 0);
+
+        printReport(analyseTable.tableName, analyseTable.ownerName);
+
+        RETURN;
+      END IF;
+
+      BEGIN
+        -- Generate a sample table
+        EXECUTE IMMEDIATE getDDLStatement(gv_tempTableName1, analyseTable.ownerName,
+          analyseTable.tableName, 'DBMS_RANDOM.VALUE', gn_sampleTableRows);
+      EXCEPTION
+        WHEN OTHERS THEN
+          -- ORA-01031: insufficient privileges
+          IF (SQLCODE = -1031) THEN
+            RAISE_APPLICATION_ERROR(-20001, 'Error. ORA-01031: insufficient privileges. Please run the following command: GRANT CREATE TABLE TO ' || USER);
+          ELSE
+            RAISE;
+          END IF;
+      END;
     END IF;
-
-    -- Check if table has any data
-    EXECUTE IMMEDIATE 'SELECT COUNT(*) FROM ' || pkg_hcc_orderby_advisor.analyseTable.ownerName || '.' || pkg_hcc_orderby_advisor.analyseTable.tableName
-      INTO ln_tableCount;
-
-    -- If not, any ordering makes no sense, skip it
-    IF ln_tableCount = 0 THEN
-      INSERT INTO T_HCC_ORDERBY_ADVISOR_LOG (TABLE_NAME, OWNER, BYTES)
-      VALUES (pkg_hcc_orderby_advisor.analyseTable.tableName, pkg_hcc_orderby_advisor.analyseTable.ownerName, 0);
-
-      pkg_hcc_orderby_advisor.printReport(pkg_hcc_orderby_advisor.analyseTable.tableName, pkg_hcc_orderby_advisor.analyseTable.ownerName);
-
-      RETURN;
-    END IF;
-
-    BEGIN
-      -- Generate a sample table
-      EXECUTE IMMEDIATE pkg_hcc_orderby_advisor.getDDLStatement(pkg_hcc_orderby_advisor.gv_tempTableName1, pkg_hcc_orderby_advisor.analyseTable.ownerName,
-        pkg_hcc_orderby_advisor.analyseTable.tableName, 'DBMS_RANDOM.VALUE', pkg_hcc_orderby_advisor.gn_sampleTableRows);
-    EXCEPTION
-      WHEN OTHERS THEN
-        -- ORA-01031: insufficient privileges
-        IF (SQLCODE = -1031) THEN
-          RAISE_APPLICATION_ERROR(-20001, 'Error. ORA-01031: insufficient privileges. Please run the following command: GRANT CREATE TABLE TO ' || USER);
-        ELSE
-          RAISE;
-        END IF;
-    END;
 
     -- Do the tests
-    pkg_hcc_orderby_advisor.smartOrderingsProcessing(pkg_hcc_orderby_advisor.analyseTable.ownerName,
-      pkg_hcc_orderby_advisor.analyseTable.tableName, ln_columnsCountTotal);
+    smartOrderingsProcessing(analyseTable.ownerName,
+      analyseTable.tableName, ln_columnsCountTotal);
 
     -- Drop the sample table
-    EXECUTE IMMEDIATE 'DROP TABLE ' || pkg_hcc_orderby_advisor.gv_tempTableName1 || ' PURGE';
+    EXECUTE IMMEDIATE 'DROP TABLE ' || gv_tempTableName1 || ' PURGE';
 
     -- Print a report
-    pkg_hcc_orderby_advisor.printReport(pkg_hcc_orderby_advisor.analyseTable.tableName, pkg_hcc_orderby_advisor.analyseTable.ownerName);
+    printReport(analyseTable.tableName, analyseTable.ownerName);
 
   END analyseTable;
 
